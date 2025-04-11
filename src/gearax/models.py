@@ -7,7 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 
 class Model(eqx.Module):
     conf: DictConfig
-    registry: ClassVar[dict]
+    registry: ClassVar[dict] = dict()
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
