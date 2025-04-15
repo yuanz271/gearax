@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import ClassVar, Self, Type
+from typing import Self, Type
 from zipfile import ZipFile
 import equinox as eqx
 from omegaconf import DictConfig, OmegaConf
@@ -7,11 +7,6 @@ from omegaconf import DictConfig, OmegaConf
 
 class Model(eqx.Module):
     conf: DictConfig
-    registry: ClassVar[dict] = dict()
-
-    def __init_subclass__(cls, *args, **kwargs):
-        super().__init_subclass__(*args, **kwargs)
-        Model.registry[cls.__name__] = cls
     
     @classmethod
     def load(cls, path: str | Path):
