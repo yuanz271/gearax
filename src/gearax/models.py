@@ -6,7 +6,7 @@ from omegaconf import DictConfig, OmegaConf
 
 
 class Model(eqx.Module):
-    conf: DictConfig
+    conf: DictConfig = eqx.field(static=True)
     
     @classmethod
     def load(cls, path: str | Path):
