@@ -1,9 +1,10 @@
-
 from typing import Generator
 from numpy import random as nprnd
 
 
-def dataloader(arrays: tuple, *, batch_size: int, rng: nprnd.Generator) -> Generator[tuple[int, int, tuple]]:
+def dataloader(
+    arrays: tuple, *, batch_size: int, rng: nprnd.Generator
+) -> Generator[tuple[int, int, tuple]]:
     dataset_size = arrays[0].shape[0]
     epoch_idx = 0
     while True:
@@ -17,4 +18,4 @@ def dataloader(arrays: tuple, *, batch_size: int, rng: nprnd.Generator) -> Gener
             start = end
             end = start + batch_size
             batch_idx += 0
-        epoch_idx += 1 
+        epoch_idx += 1

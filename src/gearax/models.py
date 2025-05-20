@@ -7,18 +7,18 @@ from omegaconf import DictConfig, OmegaConf
 
 class Model(eqx.Module):
     conf: DictConfig = eqx.field(static=True)
-    
+
     @classmethod
     def load(cls, path: str | Path):
         return load_model(path, cls)
-    
+
     @classmethod
     def save(cls, model: Self, path: str | Path):
         save_model(path, model)
 
 
 def save_model(path, model: Model):
-    with ZipFile(path, 'w') as archive:
+    with ZipFile(path, "w") as archive:
         archive.writestr("conf", OmegaConf.to_yaml(model.conf))
         with archive.open("pytree", "w") as f:
             eqx.tree_serialise_leaves(f, model)

@@ -1,6 +1,3 @@
-import math
-import time
-
 from rich.progress import (
     MofNCompleteColumn,
     Progress,
@@ -24,7 +21,7 @@ def training_progress():
         TimeRemainingColumn(),
         TextColumn("•"),
         "Loss",
-        TextColumn("{task.fields[loss]:.3f}")
+        TextColumn("{task.fields[loss]:.3f}"),
     )
 
 
@@ -37,11 +34,3 @@ def arrays_split(arrays, *, rng, ratio=None, size=None):
     return tuple(array[perm[size:]] for array in arrays), tuple(
         array[perm[:size]] for array in arrays
     )
-
-
-if __name__ == "__main__":
-    with training_progress() as pbar:
-        task_id = pbar.add_task("Fitting", total=100, loss=math.inf)
-        for i in range(100):
-            time.sleep(0.1)
-            pbar.update(task_id, advance=1, loss=i/100)
