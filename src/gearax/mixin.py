@@ -6,7 +6,7 @@ class SubclassRegistryMixin:
     _subclasses = dict()
 
     def __init_subclass__(cls, *args, **kwargs):
-        super(cls).__init_subclass__(*args, **kwargs)
+        super().__init_subclass__(*args, **kwargs)
         if SubclassRegistryMixin in cls.__bases__:
             # Do not register immediate subclasses of this mixin
             return
