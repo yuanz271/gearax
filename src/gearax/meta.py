@@ -1,4 +1,7 @@
-class ClassRegistry(type):
+from equinox import Module
+
+
+class SubClassRegistry(type):
     def __init__(cls, name, bases, dct):
         super().__init__(name, bases, dct)  # class initialization (not the metaclass)
         if not hasattr(cls, "registry"):
@@ -14,3 +17,6 @@ class ClassRegistry(type):
             return cls.registry[name]
 
         cls.get_subclass = classmethod(get_subclass)
+
+
+class ModuleRegistry(SubClassRegistry, type(Module)): ...
