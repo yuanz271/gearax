@@ -1,11 +1,9 @@
 [project]
 name = "gearax"
 version = "0.1.0"
-description = "Add your description here"
+description = "A JAX-based machine learning utilities package that provides essential tools for training neural networks with JAX and Equinox"
 readme = "README.md"
-authors = [
-    { name = "yuanz", email = "yuanz271@gmail.com" }
-]
+authors = [{ name = "yuanz", email = "yuanz271@gmail.com" }]
 requires-python = ">=3.11"
 dependencies = [
     "equinox>=0.11.12",
@@ -15,9 +13,12 @@ dependencies = [
     "rich>=14.0.0",
 ]
 
-[project.scripts]
-gearax = "gearax:main"
+[tool.hatch.build.targets.wheel]
+packages = ["src/gearax"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=8.4.1"]
