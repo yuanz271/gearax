@@ -1,7 +1,6 @@
 from collections.abc import Callable
 
-from jax import lax, numpy as jnp, random as jrnd
-from jaxtyping import Array, Key
+from jax import Array, lax, numpy as jnp, random as jrnd
 import optax
 import equinox as eqx
 
@@ -9,11 +8,11 @@ import equinox as eqx
 def train_epoch(
     model: eqx.Module,
     train_set: tuple[Array, ...],
-    batch_loss_fn: Callable[[eqx.Module, tuple[Array, ...], Key], Array],
+    batch_loss_fn: Callable[[eqx.Module, tuple[Array, ...], Array], Array],
     optimizer: optax.GradientTransformation,
     opt_state: optax.OptState,
     batch_size: int,
-    key: Key,
+    key: Array,
 ) -> eqx.Module:
     """
     Perform gradient steps for a complete training epoch.
