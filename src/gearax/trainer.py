@@ -5,6 +5,7 @@ import optax
 import equinox as eqx
 
 
+@eqx.filter_jit
 def train_epoch(
     model: eqx.Module,
     train_set: tuple[Array, ...],
@@ -58,7 +59,6 @@ def train_epoch(
     """
     train_size = jnp.size(train_set[0], 0)
 
-    @eqx.filter_jit
     def batch_grad_step(model, opt_state, batch, key):
         """Perform one gradient update step."""
         vals, grads = eqx.filter_value_and_grad(batch_loss_fn)(
