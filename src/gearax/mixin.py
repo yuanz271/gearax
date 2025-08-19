@@ -32,13 +32,18 @@ class SubclassRegistryMixin:
             Additional keyword arguments passed to super().__init_subclass__.
         """
         super().__init_subclass__(**kwargs)
-        # Only set up registry for the direct subclass of the mixin
+        
+        # Check if this is a direct subclass of SubclassRegistryMixin
+        # This ensures each inheritance chain gets its own registry
         if cls in SubclassRegistryMixin.__subclasses__() and not hasattr(
             cls, "_subclasses"
         ):
-            # Initialize the registry if it doesn't exist
+            # Initialize the registry for the root class of this inheritance chain
+            # This class will collect all its direct subclasses
             cls._subclasses: dict[str, type[Any]] = dict()
         else:
+            # This is a subclass of an already-registered class
+            # Register it with its immediate parent's registry
             cls._subclasses[cls.__name__] = cls
 
     @classmethod

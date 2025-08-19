@@ -1,3 +1,9 @@
+"""Training utilities for machine learning models.
+
+This module provides training functions for neural networks using JAX and Equinox,
+with support for efficient batch processing and gradient-based optimization.
+"""
+
 from collections.abc import Callable
 
 from jax import Array, lax, numpy as jnp, random as jrnd
@@ -42,10 +48,8 @@ def train_epoch(
 
     Returns
     -------
-    model : equinox.Module
+    equinox.Module
         Updated model after training epoch.
-    valid_loss : jax.numpy.ndarray
-        Validation loss computed on the entire validation set.
 
     Notes
     -----
