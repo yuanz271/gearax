@@ -20,7 +20,7 @@ def train_epoch(
     opt_state: optax.OptState,
     batch_size: int,
     key: Array,
-) -> eqx.Module:
+) -> tuple[eqx.Module, optax.OptState]:
     """
     Perform gradient steps for a complete training epoch.
 
@@ -99,11 +99,11 @@ def train_epoch(
         )
 
     key, batch_key = jrnd.split(key)
-    params, *_ = lax.while_loop(
+    params, opt_state, *_ = lax.while_loop(
         cond,
         batch_step,
         (params, opt_state, 0, batch_key),
     )
     model = eqx.combine(params, static)
 
-    return model
+    return model, opt_state
