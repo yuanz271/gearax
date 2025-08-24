@@ -11,7 +11,6 @@ import optax
 import equinox as eqx
 
 
-@eqx.filter_jit
 def train_epoch(
     model: eqx.Module,
     train_set: tuple[Array, ...],
