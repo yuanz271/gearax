@@ -125,7 +125,7 @@ def train(model, train_set, valid_set, key, batch_loss_fun, dataloader, batch_si
 
         return model, opt_state
 
-    @eqx.filter_jit(donate="all-except-first")
+    @eqx.filter_jit
     def evaluate(model, batch, key, data_sharding, model_sharding):
         model = eqx.filter_shard(eqx.nn.inference_mode(model), model_sharding)
         batch = eqx.filter_shard(batch, data_sharding)
@@ -140,7 +140,7 @@ def train(model, train_set, valid_set, key, batch_loss_fun, dataloader, batch_si
     # print(devices_shape)
 
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
-    model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
+    # model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
 
     key, loader_key = jr.split(key)  # Key for dataloader
 
@@ -148,6 +148,7 @@ def train(model, train_set, valid_set, key, batch_loss_fun, dataloader, batch_si
     best_model = model
     key, valid_key = jr.split(key)
     # valid_key = jr.split(valid_key, devices_shape)
+    valid_set = eqx.filter_shard(valid_set, data_sharding)
     best_val_loss = evaluate(best_model, valid_set, valid_key, data_sharding, model_sharding)
     patience_left = patience
 
@@ -156,7 +157,7 @@ def train(model, train_set, valid_set, key, batch_loss_fun, dataloader, batch_si
         try:
             key, batch_key = jr.split(key)
             # batch_key = jr.split(batch_key, devices_shape)
-            batch = eqx.filter_shard(batch, data_sharding) #?
+            # batch = eqx.filter_shard(batch, data_sharding) #?
             model, opt_state = train_step(model, opt_state, batch, batch_key, data_sharding, model_sharding)
 
             # Evaluate at the start of each new epoch
