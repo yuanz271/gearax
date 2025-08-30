@@ -5,113 +5,134 @@ with support for efficient batch processing and gradient-based optimization.
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
+from functools import partial
+from typing import Any
 
 import equinox as eqx
 import jax
-import optax
 from jax import Array, lax
 from jax import numpy as jnp
 from jax import random as jr
+from rich.progress import (
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 
 
-def train_epoch(
-    model: eqx.Module,
-    train_set: tuple[Array, ...],
-    batch_loss_fn: Callable[[eqx.Module, tuple[Array, ...], Array], Array],
-    optimizer: optax.GradientTransformation,
-    opt_state: optax.OptState,
-    batch_size: int,
-    key: Array,
-) -> tuple[eqx.Module, optax.OptState]:
+def training_progress():
     """
-    Perform gradient steps for a complete training epoch.
-
-    This function executes a full epoch of training by iterating through
-    batches of the training dataset, performing gradient descent steps,
-    and computing validation loss. The training uses permuted batch sampling
-    and JAX's while loop for efficient computation.
-
-    Parameters
-    ----------
-    model : equinox.Module
-        The XFADS model to be trained.
-    train_set : tuple of jax.numpy.ndarray
-        Training dataset as a tuple containing (times, observations, controls, covariates).
-    batch_loss_fn : callable
-        Function to compute batch loss. Should accept (model, batch, key) and return scalar loss.
-    optimizer : optax.GradientTransformation
-        Optax optimizer instance for gradient updates.
-    opt_state : optax.OptState
-        Current optimizer state.
-    key : jax.random.PRNGKey
-        Random key for stochastic operations.
-    batch_size : int
-        Number of samples per training batch.
+    Create a Rich progress bar for training visualization.
 
     Returns
     -------
-    equinox.Module
-        Updated model after training epoch.
+    Progress
+        Configured Rich Progress instance with columns for:
+        - Spinner animation
+        - Task description
+        - Progress counter
+        - Elapsed time
+        - Remaining time estimate
+        - Current loss value
+        - Moving average loss
 
     Notes
     -----
-    The function performs the following steps:
-    1. Randomly permutes the training data for batch sampling
-    2. Iterates through batches using JAX's while_loop for efficiency
-    3. Applies gradient updates using the provided optimizer
-    4. Computes validation loss in inference mode (no gradients)
-
-    The training loop continues until all samples in the epoch have been processed.
+    The progress bar provides real-time feedback during training including
+    current and smoothed loss values to monitor convergence.
     """
-    train_size = jnp.size(train_set[0], 0)
-
-    def batch_grad_step(model, opt_state, batch, key):
-        """Perform one gradient update step."""
-        vals, grads = eqx.filter_value_and_grad(batch_loss_fn)(
-            model, batch, key
-        )  # The gradient will be computed with respect to all floating-point JAX/NumPy arrays in the first argument
-        updates, opt_state = optimizer.update(grads, opt_state, model)
-        model = eqx.apply_updates(model, updates)
-
-        return vals, model, opt_state
-
-    # batch loop
-    params, static = eqx.partition(model, eqx.is_inexact_array)
-    key, perm_key = jr.split(key)
-    perm = jr.permutation(perm_key, train_size)
-
-    def cond(carry):
-        params, opt_state, batch_start, key = carry
-        return batch_start + batch_size < train_size
-
-    def batch_step(carry):
-        """Single training step with validation."""
-        params, opt_state, batch_start, key = carry
-        model = eqx.combine(params, static)
-        batch_idx = lax.dynamic_slice_in_dim(perm, batch_start, batch_size)
-        batch = tuple(arr[batch_idx] for arr in train_set)
-        key, grad_key = jr.split(key)
-        loss, model, opt_state = batch_grad_step(model, opt_state, batch, grad_key)
-
-        return (
-            params,
-            opt_state,
-            batch_start + batch_size,
-            key,
-        )
-
-    key, batch_key = jr.split(key)
-    params, opt_state, *_ = lax.while_loop(
-        cond,
-        batch_step,
-        (params, opt_state, 0, batch_key),
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        "Epoch",
+        MofNCompleteColumn(),
+        # TextColumn("•"),
+        "Elapsed",
+        TimeElapsedColumn(),
+        "Remaining",
+        TimeRemainingColumn(),
+        "Loss",
+        TextColumn("{task.fields[loss]:.3f}"),
+        "Best",
+        TextColumn("{task.fields[best]:.3f}"),
     )
-    model = eqx.combine(params, static)
-
-    return model, opt_state
 
 
-def train(model, train_set, valid_set, key, batch_loss_fun, dataloader, batch_size, num_epochs, patience, optimizer, data_sharding, model_sharding, epoch_callback=None):
+def _copy_pytree(pt):
+    return jax.tree.map(lambda x: jnp.copy(x) if eqx.is_array(x) else x, pt)
+
+
+@dataclass
+class Monitor:
+    evaluate: Callable
+    valid_set: Any
+    patience: int
+    best_model: eqx.Module
+    best_loss: float
+    callback: Callable | None = None
+    patience_left: int = field(init=False)
+    losses: list = field(init=False, default_factory=list)
+    _pbar: Any = field(init=False)
+
+    def __init__(self, model, valid_set, eval_fun, max_epoch, patience):
+        self.evaluate = eval_fun
+        self.valid_set = valid_set
+        self.patience = patience
+        self.patience_left = patience
+
+        self.best_model = _copy_pytree(model)
+        self.best_loss = jnp.inf
+        self.losses = []
+
+        self._pbar = training_progress()
+        self._task_id = self._pbar.add_task(
+            "Training", total=max_epoch, loss=jnp.inf, best=jnp.inf
+        )
+        self._pbar.start()
+
+    def step(self, model, key: Array):
+        val_loss = self.evaluate(model, self.valid_set, key).item()
+        self.losses.append(val_loss)
+
+        if val_loss < self.best_loss:
+            self.best_loss = val_loss
+            self.best_model = _copy_pytree(model)
+            self.patience_left = self.patience
+        else:
+            self.patience_left -= 1
+
+        jax.debug.callback(
+            lambda vl, bl: self._pbar.update(
+                self._task_id, advance=1, loss=vl, best=bl
+            ),
+            val_loss,
+            self.best_loss,
+        )  # type: ignore
+
+        return self.patience_left > 0
+
+    def stop(self):
+        self._pbar.stop()
+
+
+def train(
+    model,
+    train_set,
+    valid_set,
+    key,
+    batch_loss_fun,
+    dataloader,
+    batch_size,
+    max_epoch,
+    patience,
+    optimizer,
+    data_sharding,
+    model_sharding,
+):
     @eqx.filter_jit(donate="all")
     def train_step(model, opt_state, batch, key, data_sharding, model_sharding):
         model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
@@ -131,74 +152,41 @@ def train(model, train_set, valid_set, key, batch_loss_fun, dataloader, batch_si
         batch = eqx.filter_shard(batch, data_sharding)
         return lax.stop_gradient(batch_loss_fun(model, batch, key))
 
-    # num_devices = len(jax.devices())
-    # mesh = jax.make_mesh((num_devices,), ("batch",))
-    # data_sharding = NamedSharding(mesh, PartitionSpec("batch"))
-    # model_sharding = NamedSharding(mesh, PartitionSpec())
-
-    # devices_shape = data_sharding.mesh.devices.shape
-    # print(devices_shape)
-
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
-    # model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
 
-    key, loader_key = jr.split(key)  # Key for dataloader
-
-    # Best model tracking variables
-    best_model = model
-    key, valid_key = jr.split(key)
-    # valid_key = jr.split(valid_key, devices_shape)
-    valid_set = eqx.filter_shard(valid_set, data_sharding)
-    best_val_loss = evaluate(best_model, valid_set, valid_key, data_sharding, model_sharding)
-    patience_left = patience
+    monitor = Monitor(
+        model,
+        valid_set,
+        partial(evaluate, data_sharding=data_sharding, model_sharding=model_sharding),
+        max_epoch,
+        patience,
+    )
 
     # Training loop with per-epoch validation and best model tracking
-    for batch, epoch, batch_in_epoch in dataloader(train_set, batch_size, num_epochs, loader_key):
+    key, loader_key = jr.split(key)  # Key for dataloader
+    for batch, epoch, batch_in_epoch in dataloader(
+        train_set, batch_size, max_epoch, loader_key
+    ):
         try:
             key, batch_key = jr.split(key)
-            # batch_key = jr.split(batch_key, devices_shape)
-            # batch = eqx.filter_shard(batch, data_sharding) #?
-            model, opt_state = train_step(model, opt_state, batch, batch_key, data_sharding, model_sharding)
+            model, opt_state = train_step(
+                model, opt_state, batch, batch_key, data_sharding, model_sharding
+            )
 
             # Evaluate at the start of each new epoch
             if batch_in_epoch == 0:
                 # Evaluate on validation set only
-                key, valid_key = jr.split(key)
-                # valid_key = jr.split(valid_key, devices_shape)
-                val_loss = evaluate(model, valid_set, valid_key, data_sharding, model_sharding)
-
-                if epoch_callback is not None:
-                    epoch_callback(epoch, val_loss)
-
-                # Best model tracking
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    # Create independent copy using JAX tree utilities with array filtering
-                    best_model = jax.tree.map(
-                        lambda x: jnp.copy(x) if eqx.is_array(x) else x,
-                        model
-                    )
-                    patience_left = patience
-                else:
-                    patience_left -= 1
-
-                # Optional: Early stopping
-                if patience_left == 0:
+                key, monitor_key = jr.split(key)
+                if not monitor.step(model, monitor_key):
                     break
+
         except KeyboardInterrupt:
-            # print(f"\nTraining interrupted at epoch {epoch}! Using best model found so far...")
             break
     else:
         # Final validation check
-        key, valid_key = jr.split(key)
-        # valid_key = jr.split(valid_key, devices_shape)
-        val_loss = evaluate(model, valid_set, valid_key, data_sharding, model_sharding)
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            # Create independent copy using JAX tree utilities with array filtering
-            best_model = jax.tree.map(
-                lambda x: jnp.copy(x) if eqx.is_array(x) else x,
-                model
-            )
+        key, monitor_key = jr.split(key)
+        monitor.step(model, monitor_key)
 
-    return best_model
+    monitor.stop()
+
+    return monitor.best_model
