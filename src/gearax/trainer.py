@@ -132,6 +132,7 @@ def train(
     optimizer,
     data_sharding,
     model_sharding,
+    min_epoch=0,
 ):
     @eqx.filter_jit(donate="all")
     def train_step(model, opt_state, batch, key, data_sharding, model_sharding):
@@ -177,7 +178,7 @@ def train(
             if batch_in_epoch == 0:
                 # Evaluate on validation set only
                 key, monitor_key = jr.split(key)
-                if not monitor.step(model, monitor_key):
+                if not monitor.step(model, monitor_key) and epoch > min_epoch:
                     break
 
         except KeyboardInterrupt:
