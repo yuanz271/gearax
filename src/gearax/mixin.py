@@ -3,6 +3,7 @@
 This module provides mixin classes that implement useful design patterns
 for object-oriented programming, including automatic subclass registration.
 """
+
 from typing import Any
 
 
@@ -17,6 +18,7 @@ class SubclassRegistryMixin:
     using the `__init_subclass__` hook. Direct subclasses can then be retrieved
     by name using the `get_subclass` class method.
     """
+
     def __init_subclass__(cls, **kwargs):
         """Hook called when a class is subclassed.
 
@@ -32,7 +34,7 @@ class SubclassRegistryMixin:
             Additional keyword arguments passed to super().__init_subclass__.
         """
         super().__init_subclass__(**kwargs)
-        
+
         # Check if this is a direct subclass of SubclassRegistryMixin
         # This ensures each inheritance chain gets its own registry
         if cls in SubclassRegistryMixin.__subclasses__() and not hasattr(

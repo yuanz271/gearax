@@ -38,6 +38,7 @@ class ConfModule(eqx.Module):
     ...         self.conf = conf
     ...         # Initialize layers based on conf...
     """
+
     conf: DictConfig = eqx.field(static=True)
     key: InitVar[Any]
 

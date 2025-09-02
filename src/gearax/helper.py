@@ -54,7 +54,7 @@ def arrays_split(
     *,
     rng: Any,
     ratio: float | None = None,
-    size: int | None = None
+    size: int | None = None,
 ) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
     """Split arrays into training and validation sets.
 
@@ -120,7 +120,9 @@ def arrays_split(
     # Validate all arrays have the same first dimension
     for i, array in enumerate(arrays):
         if array.shape[0] != dataset_size:
-            raise ValueError(f"Array {i} has shape {array.shape[0]} but expected {dataset_size}")
+            raise ValueError(
+                f"Array {i} has shape {array.shape[0]} but expected {dataset_size}"
+            )
 
     perm = rng.permutation(dataset_size)
 
