@@ -105,13 +105,7 @@ class Monitor:
         else:
             self.patience_left -= 1
 
-        jax.debug.callback(
-            lambda vl, bl: self._pbar.update(
-                self._task_id, advance=1, loss=vl, best=bl
-            ),
-            val_loss,
-            self.best_loss,
-        )  # type: ignore
+        self._pbar.update(self._task_id, advance=1, loss=val_loss, best=self.best_loss)
 
         return self.patience_left > 0
 
