@@ -158,6 +158,7 @@ def train(
         partial(evaluate, data_sharding=data_sharding, model_sharding=model_sharding),
         max_epoch,
         patience,
+        min_epoch,
     )
 
     # Training loop with per-epoch validation and best model tracking
