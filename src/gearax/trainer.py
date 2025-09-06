@@ -78,11 +78,13 @@ class Monitor:
     losses: list = field(init=False, default_factory=list)
     _pbar: Any = field(init=False)
 
-    def __init__(self, model, valid_set, eval_fun, max_epoch, patience):
+    def __init__(self, model, valid_set, eval_fun, max_epoch, patience, min_epoch=0):
         self.evaluate = eval_fun
         self.valid_set = valid_set
         self.patience = patience
         self.patience_left = patience
+        self.max_epoch = max_epoch
+        self.min_epoch = min_epoch
 
         self.best_model = _copy_pytree(model)
         self.best_loss = jnp.inf
@@ -103,7 +105,8 @@ class Monitor:
             self.best_model = _copy_pytree(model)
             self.patience_left = self.patience
         else:
-            self.patience_left -= 1
+            if len(self.losses) > self.min_epoch:
+                self.patience_left -= 1
 
         self._pbar.update(self._task_id, advance=1, loss=val_loss, best=self.best_loss)
 
