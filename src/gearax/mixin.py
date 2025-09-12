@@ -35,18 +35,16 @@ class SubclassRegistryMixin:
         """
         super().__init_subclass__(**kwargs)
 
-        # Check if this is a direct subclass of SubclassRegistryMixin
         # This ensures each inheritance chain gets its own registry
-        if cls in SubclassRegistryMixin.__subclasses__() and not hasattr(
+        if not hasattr(
             cls, "_subclasses"
         ):
             # Initialize the registry for the root class of this inheritance chain
             # This class will collect all its direct subclasses
-            cls._subclasses: dict[str, type[Any]] = dict()
-        else:
-            # This is a subclass of an already-registered class
-            # Register it with its immediate parent's registry
-            cls._subclasses[cls.__name__] = cls
+            cls._subclasses = {}
+        # This is a subclass of an already-registered class
+        # Register it with its immediate parent's registry
+        cls._subclasses[cls.__name__] = cls
 
     @classmethod
     def get_subclass(cls, name: str) -> type[Any]:
