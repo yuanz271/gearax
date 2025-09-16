@@ -6,7 +6,6 @@ with support for efficient batch processing and gradient-based optimization.
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Any
 
 import equinox as eqx
@@ -132,7 +131,7 @@ def train(
     min_epoch=0,
 ):
     @eqx.filter_jit(donate="all")
-    def train_step(model, opt_state, batch, key, data_sharding, model_sharding):
+    def train_step(model, opt_state, batch, key):
         model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
         batch = eqx.filter_shard(batch, data_sharding)
 
@@ -140,22 +139,26 @@ def train(
         updates, opt_state = optimizer.update(grads, opt_state, model)
         model = eqx.apply_updates(model, updates)
 
-        model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
+        # model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
 
         return model, opt_state
 
-    @eqx.filter_jit
-    def evaluate(model, batch, key, data_sharding, model_sharding):
+    @eqx.filter_jit(donate="all-except-first")
+    def evaluate(model, batch, key):
         model = eqx.filter_shard(eqx.nn.inference_mode(model), model_sharding)
         batch = eqx.filter_shard(batch, data_sharding)
         return lax.stop_gradient(batch_loss_fun(model, batch, key))
 
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
+    # put on device
+    model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
+    valid_set = eqx.filter_shard(valid_set, data_sharding)
+
     monitor = Monitor(
         model,
         valid_set,
-        partial(evaluate, data_sharding=data_sharding, model_sharding=model_sharding),
+        evaluate,
         max_epoch,
         patience,
         min_epoch,
@@ -168,9 +171,8 @@ def train(
     ):
         try:
             key, batch_key = jr.split(key)
-            model, opt_state = train_step(
-                model, opt_state, batch, batch_key, data_sharding, model_sharding
-            )
+            batch = eqx.filter_shard(batch, data_sharding)
+            model, opt_state = train_step(model, opt_state, batch, batch_key)
 
             # Evaluate at the start of each new epoch
             if batch_in_epoch == 0:
