@@ -178,7 +178,7 @@ def train(
             if batch_in_epoch == 0:
                 # Evaluate on validation set only
                 key, monitor_key = jr.split(key)
-                if not monitor.step(model, monitor_key) and epoch > min_epoch:
+                if not monitor.step(model, monitor_key) and epoch >= min_epoch:
                     break
 
         except KeyboardInterrupt:
