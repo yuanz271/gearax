@@ -4,14 +4,25 @@ This module provides utilities for creating, saving, and loading machine learnin
 models that combine Equinox neural networks with OmegaConf configuration management.
 Models are serialized to ZIP archives containing both the configuration and
 the model parameters.
+
+The abstract/final design pattern
+
+Every subclass of eqx.Module must be either
+
+(a) abstract (it can be subclassed, but not instantiated); or
+(b) final (it can be instantiated, but not subclassed).
+
+Only abstractmethods and abstract attributes can be overridden. (So once they've been implemented, then a subclass may not override them.)
+
+The __init__ method, and all dataclass fields, must all be defined in one class. (No defining fields in multiple parts of a class hierarchy.)
 """
 
-from dataclasses import InitVar
-from typing import Any
+from abc import abstractmethod
 from pathlib import Path
 from zipfile import ZipFile
 
 import equinox as eqx
+from jax import Array
 from omegaconf import DictConfig, OmegaConf
 
 
@@ -25,22 +36,23 @@ class ConfModule(eqx.Module):
     ----------
     conf : DictConfig
         The configuration dictionary containing hyperparameters and settings.
-    key : InitVar[Any]
-        Initialization variable for random key.
-        Not stored as instance attribute.
 
     Examples
     --------
     >>> from omegaconf import OmegaConf
     >>> conf = OmegaConf.create({"hidden_size": 64, "num_layers": 2})
     >>> class MyModel(ConfModule):
-    ...     def __init__(self, conf, key):
+    ...     conf: DictConfig = eqx.field(static=True)
+    ...
+    ...     def __init__(self, conf: DictConfig, key: Array):
     ...         self.conf = conf
     ...         # Initialize layers based on conf...
     """
 
     conf: DictConfig = eqx.field(static=True)
-    key: InitVar[Any]
+
+    @abstractmethod
+    def __init__(self, conf: DictConfig, key: Array): ...
 
 
 def save_model(path: str | Path, model: ConfModule) -> None:
