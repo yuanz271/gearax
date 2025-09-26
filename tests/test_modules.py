@@ -5,7 +5,6 @@ def test_confmodule():
     from gearax.modules import ConfModule
     from jax import Array
     import jax.random as jr
-    import equinox as eqx
     from omegaconf import DictConfig
 
     class Derived(ConfModule):

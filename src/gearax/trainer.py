@@ -143,7 +143,7 @@ def train(
 
         return model, opt_state
 
-    @eqx.filter_jit(donate="all-except-first")
+    @eqx.filter_jit
     def evaluate(model, batch, key):
         model = eqx.filter_shard(eqx.nn.inference_mode(model), model_sharding)
         batch = eqx.filter_shard(batch, data_sharding)
