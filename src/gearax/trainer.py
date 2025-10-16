@@ -23,7 +23,7 @@ from rich.progress import (
 )
 
 
-def training_progress():
+def _training_progress():
     """
     Create a Rich progress bar for training visualization.
 
@@ -127,7 +127,7 @@ class Monitor:
         self.best_loss = jnp.inf
         self.losses = []
 
-        self._pbar = training_progress()
+        self._pbar = _training_progress()
         self._task_id = self._pbar.add_task(
             "Training", total=max_epoch, loss=jnp.inf, best=jnp.inf
         )
