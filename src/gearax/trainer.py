@@ -23,7 +23,7 @@ from rich.progress import (
 )
 
 
-def _training_progress():
+def _training_progress() -> Progress:
     """
     Create a Rich progress bar for training visualization.
 
@@ -98,7 +98,7 @@ class Monitor:
     losses: list = field(init=False, default_factory=list)
     _pbar: Any = field(init=False)
 
-    def __init__(self, model, valid_set, eval_fun, max_epoch, patience, min_epoch=0):
+    def __init__(self, model, valid_set, eval_fun, max_epoch, patience, min_epoch: int=0) -> None:
         """Initialise the monitor and attach a Rich progress bar.
 
         Parameters
@@ -133,7 +133,7 @@ class Monitor:
         )
         self._pbar.start()
 
-    def step(self, model, key: Array):
+    def step(self, model, key: Array) -> bool:
         val_loss = self.evaluate(model, self.valid_set, key).item()
         self.losses.append(val_loss)
 
@@ -149,7 +149,7 @@ class Monitor:
 
         return self.patience_left > 0
 
-    def stop(self):
+    def stop(self) -> None:
         self._pbar.stop()
 
 
@@ -166,7 +166,7 @@ def train(
     optimizer,
     data_sharding,
     model_sharding,
-    min_epoch=0,
+    min_epoch: int=0,
 ):
     """
     Train a model with early stopping and sharded data/model execution.
