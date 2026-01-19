@@ -19,7 +19,7 @@ class SubclassRegistryMixin:
     by name using the `get_subclass` class method.
     """
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs) -> None:
         """Hook called when a class is subclassed.
 
         Automatically registers the subclass with its immediate parent class.

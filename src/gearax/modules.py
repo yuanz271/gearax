@@ -52,7 +52,7 @@ class ConfModule(eqx.Module):
     conf: DictConfig = eqx.field(static=True)
 
     @abstractmethod
-    def __init__(self, conf: DictConfig, key: Array): ...
+    def __init__(self, conf: DictConfig, key: Array) -> None: ...
 
 
 def save_model(path: str | Path, model: ConfModule) -> None:

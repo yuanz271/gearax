@@ -23,7 +23,7 @@ from rich.progress import (
 )
 
 
-def training_progress():
+def _training_progress() -> Progress:
     """
     Create a Rich progress bar for training visualization.
 
@@ -37,12 +37,12 @@ def training_progress():
         - Elapsed time
         - Remaining time estimate
         - Current loss value
-        - Moving average loss
+        - Best observed loss
 
     Notes
     -----
     The progress bar provides real-time feedback during training including
-    current and smoothed loss values to monitor convergence.
+    the instantaneous loss and the best loss encountered so far.
     """
     return Progress(
         SpinnerColumn(),
@@ -62,11 +62,32 @@ def training_progress():
 
 
 def _copy_pytree(pt):
+    """Return a defensive copy of a pytree, copying only array leaves."""
     return jax.tree.map(lambda x: jnp.copy(x) if eqx.is_array(x) else x, pt)
 
 
 @dataclass
 class Monitor:
+    """Early-stopping helper that tracks validation performance.
+
+    Attributes
+    ----------
+    evaluate : Callable
+        Function computing the validation loss given a model, dataset, and PRNG key.
+    valid_set : Any
+        Validation data prepared for `evaluate`.
+    patience : int
+        Number of epochs to wait before stopping once the loss stalls.
+    patience_left : int
+        Remaining epochs before early stopping triggers.
+    best_model : eqx.Module
+        Snapshot of the best model parameters encountered so far.
+    best_loss : float
+        Best validation loss recorded throughout training.
+    losses : list
+        History of validation losses across epochs.
+    """
+
     evaluate: Callable
     valid_set: Any
     patience: int
@@ -77,7 +98,24 @@ class Monitor:
     losses: list = field(init=False, default_factory=list)
     _pbar: Any = field(init=False)
 
-    def __init__(self, model, valid_set, eval_fun, max_epoch, patience, min_epoch=0):
+    def __init__(self, model, valid_set, eval_fun, max_epoch, patience, min_epoch: int=0) -> None:
+        """Initialise the monitor and attach a Rich progress bar.
+
+        Parameters
+        ----------
+        model : eqx.Module
+            Model state to track as the current baseline.
+        valid_set : Any
+            Validation data passed to `eval_fun`.
+        eval_fun : Callable
+            Callable with signature `(model, valid_set, key) -> Array` returning the loss.
+        max_epoch : int
+            Maximum number of epochs to display in the progress bar.
+        patience : int
+            Number of epochs to wait without improvement before stopping.
+        min_epoch : int, optional
+            Minimum number of epochs that must elapse before early stopping engages.
+        """
         self.evaluate = eval_fun
         self.valid_set = valid_set
         self.patience = patience
@@ -89,13 +127,13 @@ class Monitor:
         self.best_loss = jnp.inf
         self.losses = []
 
-        self._pbar = training_progress()
+        self._pbar = _training_progress()
         self._task_id = self._pbar.add_task(
             "Training", total=max_epoch, loss=jnp.inf, best=jnp.inf
         )
         self._pbar.start()
 
-    def step(self, model, key: Array):
+    def step(self, model, key: Array) -> bool:
         val_loss = self.evaluate(model, self.valid_set, key).item()
         self.losses.append(val_loss)
 
@@ -111,7 +149,7 @@ class Monitor:
 
         return self.patience_left > 0
 
-    def stop(self):
+    def stop(self) -> None:
         self._pbar.stop()
 
 
@@ -128,10 +166,49 @@ def train(
     optimizer,
     data_sharding,
     model_sharding,
-    min_epoch=0,
+    min_epoch: int=0,
 ):
+    """
+    Train a model with early stopping and sharded data/model execution.
+
+    Parameters
+    ----------
+    model : eqx.Module
+        Model to optimise; may contain PyTree leaves requiring sharding.
+    train_set : Any
+        Training dataset consumed by `dataloader`.
+    valid_set : Any
+        Validation dataset used for early-stopping evaluation.
+    key : Array
+        Base PRNG key; internally split for data loading and evaluation.
+    batch_loss_fun : Callable
+        Function computing the loss for a `(model, batch, key)` triple.
+    dataloader : Callable
+        Generator producing `(batch, epoch, batch_in_epoch)` tuples for training.
+    batch_size : int
+        Size of each training batch.
+    max_epoch : int
+        Maximum number of epochs to train for.
+    patience : int
+        Early-stopping patience supplied to the `Monitor`.
+    optimizer : Any
+        Optimiser matching the Equinox Optax-like interface with `init`/`update`.
+    data_sharding : Any
+        Partitioning specification applied to batch data via `eqx.filter_shard`.
+    model_sharding : Any
+        Partitioning specification applied to the model and optimiser state.
+    min_epoch : int, optional
+        Minimum number of epochs that must run before early stopping can trigger.
+
+    Returns
+    -------
+    eqx.Module
+        Copy of the best-performing model encountered during training.
+    """
+
     @eqx.filter_jit(donate="all")
     def train_step(model, opt_state, batch, key):
+        """One optimization step: shard inputs, compute gradients, and update model."""
         model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
         batch = eqx.filter_shard(batch, data_sharding)
 
@@ -145,6 +222,7 @@ def train(
 
     @eqx.filter_jit
     def evaluate(model, batch, key):
+        """Sharded validation step that runs the loss function in inference mode."""
         model = eqx.filter_shard(eqx.nn.inference_mode(model), model_sharding)
         batch = eqx.filter_shard(batch, data_sharding)
         return lax.stop_gradient(batch_loss_fun(model, batch, key))
