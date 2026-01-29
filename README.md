@@ -1,69 +1,103 @@
 # Gearax
 
-A JAX-based machine learning utilities package that provides essential tools for training neural networks with JAX and Equinox. Gearax focuses on configuration management, model serialization, progress tracking, and helpful design patterns for ML workflows.
+Gearax is a small set of utilities for training JAX + Equinox models with:
+- **Config-carrying modules** (OmegaConf `DictConfig` stored alongside parameters)
+- **ZIP-based model serialization** (config + pytree leaves)
+- **A sharded training loop** with early stopping and Rich progress
 
-## Features
+This is a library package (no CLI).
 
-- **Model Configuration & Serialization**: Seamlessly combine Equinox models with OmegaConf configurations and save/load complete models
-- **Training Progress Tracking**: Rich progress bars optimized for machine learning training loops
-- **Data Splitting Utilities**: Convenient functions for splitting datasets into training/validation sets
-- **Design Pattern Mixins**: Automatic subclass registration for factory patterns
+## Install
 
-## Installation
+This repo is set up for **uv** (recommended) and a standard editable install.
 
 ```bash
-pip install git+https://github.com/yourusername/gearax.git
+# Locked environment (runtime deps)
+uv sync --frozen
+
+# With dev deps (pytest)
+uv sync --frozen --group dev
+
+# Editable install (if you prefer pip)
+pip install -e .
 ```
 
-## API Reference
+## Quickstart
 
-### `gearax.modules`
+### 1) Define a config-carrying model
 
-#### `ConfModule`
-Base class for Equinox modules with configuration management.
+`ConfModule` is an Equinox module base class that requires a `conf` field.
 
-**Attributes:**
-- `conf`: DictConfig containing hyperparameters and settings
-- `key`: InitVar for random key (not stored as instance attribute)
+```python
+import equinox as eqx
+import jax.random as jr
+from jax import Array
+from omegaconf import DictConfig, OmegaConf
 
-#### `save_model(path, model)`
-Save a ConfModule to a ZIP archive.
+from gearax.modules import ConfModule
 
-**Parameters:**
-- `path`: File path for the saved model
-- `model`: ConfModule instance to save
 
-#### `load_model(path, klass)`
-Load a ConfModule from a ZIP archive.
+class MyModel(ConfModule):
+    # ConfModule already declares: conf: DictConfig = eqx.field(static=True)
 
-**Parameters:**
-- `path`: File path to the saved model
-- `klass`: Model class to instantiate
+    def __init__(self, conf: DictConfig, key: Array):
+        self.conf = conf
+        # initialize parameters using `key` and values in `conf`
 
-**Returns:** Loaded model instance
 
-### `gearax.helper`
+conf = OmegaConf.create({"hidden_size": 64})
+model = MyModel(conf, jr.key(0))
+```
 
-#### `training_progress()`
-Create a Rich Progress bar configured for training loops.
+### 2) Save / load (config + parameters)
 
-**Returns:** Configured Progress instance with training-specific columns
+```python
+from gearax.modules import save_model, load_model
 
-#### `arrays_split(arrays, *, rng, ratio=None, size=None)`
-Split arrays into training and validation sets.
+save_model("model.zip", model)
+restored = load_model("model.zip", MyModel)
+assert isinstance(restored, MyModel)
+```
 
-**Parameters:**
-- `arrays`: Sequence of arrays to split
-- `rng`: Random number generator
-- `ratio`: Fraction for validation set (0 < ratio < 1)
-- `size`: Absolute number of validation samples
+Serialization format:
+- `conf`: YAML (from `OmegaConf.to_yaml`)
+- `pytree`: Equinox leaves (via `eqx.tree_serialise_leaves`)
 
-**Returns:** Tuple of (train_arrays, val_arrays)
+### 3) Train with early stopping + progress
 
-### `gearax.mixin`
+`gearax.trainer.train(...)` is a JAX/Equinox-focused training loop that expects:
+- a `dataloader(train_set, batch_size, max_epoch, key)` yielding `(batch, epoch, batch_in_epoch)`
+- `data_sharding` and `model_sharding` suitable for `eqx.filter_shard`
 
-#### `SubclassRegistryMixin`
-Mixin for automatic subclass registration.
+See `src/gearax/trainer.py` for the full signature and sharding/donation behavior.
 
-**Methods:**
-- `get_subclass(name)`: Retrieve registered subclass by name
+## API Surface
+
+Gearax does **not** currently re-export symbols from `gearax` top-level (it only defines `gearax.__version__`).
+Import from submodules:
+
+- `gearax.modules`
+  - `ConfModule`
+  - `save_model(path, model)`
+  - `load_model(path, klass)`
+- `gearax.trainer`
+  - `Monitor` (early stopping + Rich progress)
+  - `train(...)` (sharded training loop)
+- `gearax.mixin`
+  - `SubclassRegistryMixin` (+ `get_subclass(name)`)
+
+## Development
+
+```bash
+# Tests
+uv run pytest
+
+# Lint/format (via pre-commit)
+pre-commit run -a
+
+# Build sdist/wheel
+uv build
+
+# Lockfile check (CI-friendly)
+uv lock --check
+```
