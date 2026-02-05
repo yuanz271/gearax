@@ -69,6 +69,10 @@ Serialization format:
 - a `dataloader(train_set, batch_size, max_epoch, key)` yielding `(batch, epoch, batch_in_epoch)`
 - `data_sharding` and `model_sharding` suitable for `eqx.filter_shard`
 
+Note: `eqx.filter_shard` outside the JIT'd `train_step` is a convenience for `device_put`.
+Using `filter_shard` inside the JIT provides the sharding assertion/enforcement.
+You can omit the outer call if you don't need the explicit device placement.
+
 See `src/gearax/trainer.py` for the full signature and sharding/donation behavior.
 
 ## API Surface
