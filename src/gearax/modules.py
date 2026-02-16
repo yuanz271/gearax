@@ -31,6 +31,8 @@ class ConfModule(eqx.Module):
 
     This class combines an Equinox Module with an OmegaConf DictConfig,
     allowing models to carry their configuration alongside their parameters.
+    Subclasses should accept a ``key`` that can be ``None`` during
+    shape inference in ``load_model``.
 
     Attributes
     ----------
@@ -90,7 +92,9 @@ def load_model(path: str | Path, klass: type[ConfModule]) -> ConfModule:
         File path to the saved model ZIP archive.
     klass : type[ConfModule]
         The model class to instantiate. Must be a subclass of ConfModule
-        and have a constructor that accepts (conf, key) arguments.
+        and have a constructor that accepts (conf, key) arguments. A dummy
+        key of ``None`` is passed during shape inference since parameters
+        are overwritten during deserialization.
 
     Returns
     -------

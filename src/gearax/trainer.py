@@ -80,12 +80,18 @@ class Monitor:
         Number of epochs to wait before stopping once the loss stalls.
     patience_left : int
         Remaining epochs before early stopping triggers.
+    max_epoch : int
+        Maximum number of epochs to display in the progress bar.
+    min_epoch : int
+        Minimum number of epochs that must elapse before early stopping engages.
     best_model : eqx.Module
         Snapshot of the best model parameters encountered so far.
     best_loss : float
         Best validation loss recorded throughout training.
     losses : list
         History of validation losses across epochs.
+    _pbar : Progress
+        Rich progress bar used for monitoring.
     """
 
     evaluate: Callable
@@ -99,7 +105,7 @@ class Monitor:
     _pbar: Any = field(init=False)
 
     def __init__(self, model, valid_set, eval_fun, max_epoch, patience, min_epoch: int=0) -> None:
-        """Initialise the monitor and attach a Rich progress bar.
+        """Initialize the monitor and attach a Rich progress bar.
 
         Parameters
         ----------

@@ -7,6 +7,34 @@ This file is for automated coding agents working in this repository.
 - Features: config-carrying modules, ZIP serialization, sharded training loop.
 - Python package uses a src/ layout; import from `gearax.*`.
 
+## CORE CONCEPTS
+- `ConfModule` ties an `OmegaConf` config to an Equinox module.
+- `save_model`/`load_model` store configs + parameters in a two-entry ZIP.
+- `train` provides a sharded training loop with early stopping and monitoring.
+- `SubclassRegistryMixin` supports name-based factory registration.
+
+## GITHUB FLOW
+- Branch from `main` for all work; no direct changes on `main`.
+- Keep branches small and focused; open a pull request for review.
+- Use pull requests for merging to `main`; avoid rebasing shared branches.
+- Sync with `main` before final review (merge or rebase locally as needed).
+- Ensure tests/lint pass before requesting review.
+
+## GIT SAFETY
+- Do not commit, push, merge, rebase, tag, or otherwise change git history without explicit permission.
+- Run `git status` and `git diff` before proposing any commit.
+
+## FILE SAFETY
+- Never delete files or folders without explicit permission.
+
+## DEPENDENCIES & CONFIGURATION
+- Do not add, remove, or upgrade dependencies without informing the user.
+- Do not modify environment files (.env), credentials, secrets, or auth configs without permission.
+
+## DOCUMENTATION
+- Update relevant docs (README, inline docs, docstrings) whenever changes are made.
+- Avoid creating new documentation files unless explicitly requested.
+
 ## REPO LAYOUT
 ```text
 ./
@@ -137,6 +165,7 @@ JAX/EQX conventions:
 - Add comments only when behavior is non-obvious.
 - Preserve existing public APIs and function signatures unless required.
 - When touching training code, keep pure-function style and avoid side effects.
+- Update relevant docs (README, inline docs, docstrings) whenever changes are made.
 
 ## AGENT-SPECIFIC NOTES
 - This repo includes additional agent notes in:

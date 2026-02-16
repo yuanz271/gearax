@@ -10,21 +10,21 @@ from typing import Any
 class SubclassRegistryMixin:
     """Mixin that automatically registers subclasses for factory pattern.
 
-    This mixin provides automatic registration of direct subclasses, allowing them
-    to be retrieved by name. Each class that inherits from this mixin maintains
-    its own separate registry containing only its immediate subclasses.
+    This mixin provides automatic registration of subclasses, allowing them
+    to be retrieved by name. The registry is shared across the inheritance
+    chain so a base class can access all descendant subclasses (plugin-style
+    discovery).
 
     The registry is populated automatically when subclasses are defined,
-    using the `__init_subclass__` hook. Direct subclasses can then be retrieved
-    by name using the `get_subclass` class method.
+    using the `__init_subclass__` hook. Descendant subclasses can then be
+    retrieved by name using the `get_subclass` class method.
     """
 
     def __init_subclass__(cls, **kwargs) -> None:
         """Hook called when a class is subclassed.
 
-        Automatically registers the subclass with its immediate parent class.
-        Each class gets its own registry and only tracks its direct subclasses,
-        not descendants further down the hierarchy.
+        Automatically registers the subclass in the shared registry for the
+        inheritance chain so the base class can discover all descendants.
 
         Parameters
         ----------
