@@ -115,3 +115,105 @@ def test_train_smoke_single_device_sharding():
 
     assert isinstance(best_model, Model)
     assert best_model.w.shape == (1,)
+
+
+def test_train_early_stops_before_max_epoch():
+    import equinox as eqx
+
+    from gearax.trainer import train
+
+    class Model(eqx.Module):
+        w: jax.Array
+
+        def __init__(self, key):
+            self.w = jr.normal(key, (1,))
+
+        def __call__(self, x):
+            return x * self.w
+
+    model = Model(jr.key(0))
+    initial_w = jnp.array(model.w)
+    train_set = None
+    valid_set = jnp.array([1.0])
+    counters = {"batches": 0}
+
+    def batch_loss_fun(m, batch, _key):
+        pred = m(batch)
+        return jnp.mean((pred - batch) ** 2)
+
+    def dataloader(_train_set, _batch_size, max_epoch, _loader_key):
+        for epoch in range(max_epoch):
+            counters["batches"] += 1
+            yield jnp.array([1.0]), epoch, 0
+
+    device_sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
+
+    best_model = train(
+        model=model,
+        train_set=train_set,
+        valid_set=valid_set,
+        key=jr.key(0),
+        batch_loss_fun=batch_loss_fun,
+        dataloader=dataloader,
+        batch_size=1,
+        max_epoch=5,
+        patience=1,
+        optimizer=_TinySGD(lr=0.0),
+        data_sharding=device_sharding,
+        model_sharding=device_sharding,
+        min_epoch=0,
+    )
+
+    assert counters["batches"] == 2
+    assert jnp.allclose(best_model.w, initial_w)
+
+
+def test_train_runs_final_validation_when_no_batches():
+    import equinox as eqx
+
+    from gearax.trainer import train
+
+    class Model(eqx.Module):
+        w: jax.Array
+
+        def __init__(self, key):
+            self.w = jr.normal(key, (1,))
+
+        def __call__(self, x):
+            return x * self.w
+
+    model = Model(jr.key(0))
+    train_set = None
+    valid_set = jnp.array([1.0])
+    calls = {"count": 0}
+
+    def batch_loss_fun(m, batch, _key):
+        calls["count"] += 1
+        pred = m(batch)
+        return jnp.mean((pred - batch) ** 2)
+
+    def dataloader(_train_set, _batch_size, _max_epoch, _loader_key):
+        if False:
+            yield None, 0, 0
+
+    device_sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
+
+    with jax.disable_jit():
+        best_model = train(
+            model=model,
+            train_set=train_set,
+            valid_set=valid_set,
+            key=jr.key(0),
+            batch_loss_fun=batch_loss_fun,
+            dataloader=dataloader,
+            batch_size=1,
+            max_epoch=2,
+            patience=2,
+            optimizer=_TinySGD(lr=0.0),
+            data_sharding=device_sharding,
+            model_sharding=device_sharding,
+            min_epoch=0,
+        )
+
+    assert calls["count"] == 1
+    assert isinstance(best_model, Model)
