@@ -17,7 +17,7 @@ def test_monitor_patience_and_min_epoch_behavior():
     # With min_epoch=3, the first no-improvement step should NOT decrement patience_left.
     losses = iter([10.0, 9.0, 9.0, 9.0, 9.0])
 
-    def eval_fun(_model, _valid_set, _key):
+    def eval_fun(_model, _valid_set, _key, _step):
         return jnp.array(next(losses))
 
     monitor = Monitor(
@@ -30,27 +30,28 @@ def test_monitor_patience_and_min_epoch_behavior():
     )
     try:
         key = jr.key(0)
+        step = jnp.array(0, dtype=jnp.int32)
 
         # Step 1: improvement (best_loss inf -> 10)
-        assert monitor.step(model, key) is True
+        assert monitor.step(model, key, step) is True
         assert monitor.best_loss == 10.0
         assert monitor.patience_left == 2
 
         # Step 2: improvement (10 -> 9)
-        assert monitor.step(model, key) is True
+        assert monitor.step(model, key, step) is True
         assert monitor.best_loss == 9.0
         assert monitor.patience_left == 2
 
         # Step 3: no improvement, but still within min_epoch window => no decrement
-        assert monitor.step(model, key) is True
+        assert monitor.step(model, key, step) is True
         assert monitor.patience_left == 2
 
         # Step 4: no improvement, now decrement
-        assert monitor.step(model, key) is True
+        assert monitor.step(model, key, step) is True
         assert monitor.patience_left == 1
 
         # Step 5: no improvement, decrement to 0 => stop condition false
-        assert monitor.step(model, key) is False
+        assert monitor.step(model, key, step) is False
         assert monitor.patience_left == 0
     finally:
         monitor.stop()
@@ -86,7 +87,7 @@ def test_train_smoke_single_device_sharding():
     train_set = None
     valid_set = jnp.array([1.0])
 
-    def batch_loss_fun(m, batch, _key):
+    def batch_loss_fun(m, batch, _key, _step):
         pred = m(batch)
         return jnp.mean((pred - batch) ** 2)
 
@@ -137,7 +138,7 @@ def test_train_early_stops_before_max_epoch():
     valid_set = jnp.array([1.0])
     counters = {"batches": 0}
 
-    def batch_loss_fun(m, batch, _key):
+    def batch_loss_fun(m, batch, _key, _step):
         pred = m(batch)
         return jnp.mean((pred - batch) ** 2)
 
@@ -187,7 +188,7 @@ def test_train_runs_final_validation_when_no_batches():
     valid_set = jnp.array([1.0])
     calls = {"count": 0}
 
-    def batch_loss_fun(m, batch, _key):
+    def batch_loss_fun(m, batch, _key, _step):
         calls["count"] += 1
         pred = m(batch)
         return jnp.mean((pred - batch) ** 2)

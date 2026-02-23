@@ -73,7 +73,8 @@ class Monitor:
     Attributes
     ----------
     evaluate : Callable
-        Function computing the validation loss given a model, dataset, and PRNG key.
+        Function computing the validation loss given a model, dataset, PRNG key,
+        and training step.
     valid_set : Any
         Validation data prepared for `evaluate`.
     patience : int
@@ -114,7 +115,8 @@ class Monitor:
         valid_set : Any
             Validation data passed to `eval_fun`.
         eval_fun : Callable
-            Callable with signature `(model, valid_set, key) -> Array` returning the loss.
+            Callable with signature ``(model, valid_set, key, step) -> Array``
+            returning the loss.
         max_epoch : int
             Maximum number of epochs to display in the progress bar.
         patience : int
@@ -139,8 +141,8 @@ class Monitor:
         )
         self._pbar.start()
 
-    def step(self, model, key: Array) -> bool:
-        val_loss = self.evaluate(model, self.valid_set, key).item()
+    def step(self, model, key: Array, step: Array | None = None) -> bool:
+        val_loss = self.evaluate(model, self.valid_set, key, step).item()
         self.losses.append(val_loss)
 
         if val_loss < self.best_loss:
@@ -188,7 +190,11 @@ def train(
     key : Array
         Base PRNG key; internally split for data loading and evaluation.
     batch_loss_fun : Callable
-        Function computing the loss for a `(model, batch, key)` triple.
+        Function computing the loss for a ``(model, batch, key, step)`` call,
+        where *step* is a scalar ``jnp.int32`` counting training batches
+        processed so far (starting from 0).  During validation the current
+        training step is forwarded unchanged so that any step-dependent
+        schedule (e.g. KL warm-up) stays consistent.
     dataloader : Callable
         Generator producing `(batch, epoch, batch_in_epoch)` tuples for training.
     batch_size : int
@@ -213,12 +219,12 @@ def train(
     """
 
     @eqx.filter_jit(donate="all")
-    def train_step(model, opt_state, batch, key):
+    def train_step(model, opt_state, batch, key, step):
         """One optimization step: shard inputs, compute gradients, and update model."""
         model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
         batch = eqx.filter_shard(batch, data_sharding)
 
-        grads = eqx.filter_grad(batch_loss_fun)(model, batch, key)
+        grads = eqx.filter_grad(batch_loss_fun)(model, batch, key, step)
         updates, opt_state = optimizer.update(grads, opt_state, model)
         model = eqx.apply_updates(model, updates)
 
@@ -227,11 +233,11 @@ def train(
         return model, opt_state
 
     @eqx.filter_jit
-    def evaluate(model, batch, key):
+    def evaluate(model, batch, key, step):
         """Sharded validation step that runs the loss function in inference mode."""
         model = eqx.filter_shard(eqx.nn.inference_mode(model), model_sharding)
         batch = eqx.filter_shard(batch, data_sharding)
-        return lax.stop_gradient(batch_loss_fun(model, batch, key))
+        return lax.stop_gradient(batch_loss_fun(model, batch, key, step))
 
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
@@ -249,6 +255,7 @@ def train(
     )
 
     # Training loop with per-epoch validation and best model tracking
+    step = jnp.array(0, dtype=jnp.int32)
     key, loader_key = jr.split(key)  # Key for dataloader
     for batch, epoch, batch_in_epoch in dataloader(
         train_set, batch_size, max_epoch, loader_key
@@ -256,13 +263,14 @@ def train(
         try:
             key, batch_key = jr.split(key)
             batch = eqx.filter_shard(batch, data_sharding)
-            model, opt_state = train_step(model, opt_state, batch, batch_key)
+            model, opt_state = train_step(model, opt_state, batch, batch_key, step)
+            step = step + 1
 
             # Evaluate at the start of each new epoch
             if batch_in_epoch == 0:
                 # Evaluate on validation set only
                 key, monitor_key = jr.split(key)
-                if not monitor.step(model, monitor_key) and epoch >= min_epoch:
+                if not monitor.step(model, monitor_key, step) and epoch >= min_epoch:
                     break
 
         except KeyboardInterrupt:
@@ -270,7 +278,7 @@ def train(
     else:
         # Final validation check
         key, monitor_key = jr.split(key)
-        monitor.step(model, monitor_key)
+        monitor.step(model, monitor_key, step)
 
     monitor.stop()
 
