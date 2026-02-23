@@ -230,7 +230,7 @@ def train(
 
         # model, opt_state = eqx.filter_shard((model, opt_state), model_sharding)
 
-        return model, opt_state
+        return model, opt_state, step + 1
 
     @eqx.filter_jit
     def evaluate(model, batch, key, step):
@@ -263,8 +263,7 @@ def train(
         try:
             key, batch_key = jr.split(key)
             batch = eqx.filter_shard(batch, data_sharding)
-            model, opt_state = train_step(model, opt_state, batch, batch_key, step)
-            step = step + 1
+            model, opt_state, step = train_step(model, opt_state, batch, batch_key, step)
 
             # Evaluate at the start of each new epoch
             if batch_in_epoch == 0:
